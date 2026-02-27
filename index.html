@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login | Attendance Management System</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            --primary: #4f46e5; --danger: #dc2626; --success: #16a34a;
+            --dark: #0f172a; --light: #f8fafc; --whatsapp: #25d366; --call: #0ea5e9;
+        }
+
+        * { box-sizing: border-box; font-family: 'Inter', sans-serif; margin: 0; padding: 0; }
+        body { background: var(--light); color: var(--dark); font-size: 14px; }
+
+        /* Login & Sidebar */
+        #login-screen { display: flex; height: 100vh; align-items: center; justify-content: center; background: var(--dark); position: fixed; width: 100%; z-index: 1000; }
+        .login-card { background: white; padding: 40px; border-radius: 20px; width: 90%; max-width: 400px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); }
+        nav { background: var(--dark); color: white; padding: 1.2rem; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        .sidebar { background: white; width: 260px; height: calc(100vh - 65px); border-right: 1px solid #e2e8f0; position: fixed; transition: 0.3s; z-index: 90; overflow-y: auto; }
+        .content { margin-left: 260px; padding: 25px; transition: 0.3s; }
+
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); width: 100%; }
+            .sidebar.open { transform: translateX(0); }
+            .content { margin-left: 0; }
+        }
+
+        .nav-item { padding: 16px 24px; cursor: pointer; color: #475569; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid #f1f5f9; font-weight: 500; }
+        .nav-item.active { background: #f5f3ff; color: var(--primary); border-left: 5px solid var(--primary); }
+
+        /* UI Components */
+        .card { background: white; padding: 24px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 25px; }
+        .grid-layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        label { display: block; font-size: 11px; font-weight: 700; color: #64748b; margin-bottom: 5px; text-transform: uppercase; }
+        input, select { padding: 12px; border: 1px solid #cbd5e1; border-radius: 10px; width: 100%; font-size: 13px; }
+        
+        button { padding: 12px 20px; border-radius: 10px; border: none; cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; transition: 0.2s; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-suggest { background: #f1f5f9; color: var(--primary); border: 1px dashed var(--primary); padding: 5px; font-size: 10px; margin-top: 5px; width: 100%; justify-content: center; }
+
+        /* Mobile Mega Icons (60px) */
+        .btn-action-mega { width: 60px; height: 60px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 26px; color: white; text-decoration: none; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .bg-call { background: var(--call); }
+        .bg-wa { background: var(--whatsapp); }
+        .action-spacer { display: flex; gap: 20px; align-items: center; }
+
+        /* Tables & Filters */
+        .table-container { overflow-x: auto; background: white; border-radius: 16px; border: 1px solid #e2e8f0; }
+        table { width: 100%; border-collapse: collapse; min-width: 950px; }
+        th, td { padding: 16px; text-align: left; border-bottom: 1px solid #f1f5f9; }
+        th { background: #f8fafc; color: #64748b; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+        
+        .filter-bar { background: white; padding: 12px 20px; border-radius: 12px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; border: 1px solid #e2e8f0; }
+        .filter-select { border: none; background: transparent; font-weight: 700; font-size: 14px; color: var(--dark); outline: none; cursor: pointer; width: 150px; }
+
+        /* Attendance Toggles */
+        .att-btn { width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: 700; background: #f1f5f9; border: 2px solid #cbd5e1; font-size: 18px; color: #475569; }
+        .att-btn.active-p { background: var(--success); color: white; border-color: var(--success); }
+        .att-btn.active-a { background: var(--danger); color: white; border-color: var(--danger); }
+
+        .notes-input { width: 150px; padding: 8px; border: 1px solid #ddd; border-radius: 8px; font-size: 12px; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <div class="login-card">
+            <div style="text-align: center; margin-bottom: 30px;">
+                <i class="fas fa-cloud" style="font-size: 45px; color: var(--primary); margin-bottom: 15px;"></i>
+                <h2 style="font-weight: 800;">Admin Access</h2>
+                <p style="color: #64748b; font-size: 12px;">Cloud Powered Attendance System</p>
+            </div>
+            <div class="input-group" style="margin-bottom:15px"><input type="text" id="username" placeholder="Username" style="padding:12px; width:100%; border-radius:8px; border:1px solid #ddd"></div>
+            <div class="input-group" style="margin-bottom:15px"><input type="password" id="password" placeholder="Password" style="padding:12px; width:100%; border-radius:8px; border:1px solid #ddd"></div>
+            <button id="login-btn" class="btn-primary" onclick="login()" style="width: 100%; justify-content: center; padding: 15px;">Sign In</button>
+        </div>
+    </div>
+
+    <main id="main-app" class="hidden">
+        <nav>
+            <div style="display:flex; align-items:center; gap:12px;">
+                <i class="fas fa-bars-staggered" onclick="toggleSidebar()" style="cursor:pointer; font-size: 20px;"></i>
+                <span style="font-weight:800; font-size: 18px;">Attendance Management System</span>
+            </div>
+            <button onclick="location.reload()" style="background:transparent; color:white; border:1px solid white; padding: 6px 12px;"><i class="fas fa-power-off"></i></button>
+        </nav>
+
+        <aside class="sidebar" id="sidebar">
+            <div class="nav-item active" onclick="nav('home', this)"><i class="fas fa-house"></i> Dashboard</div>
+            <div class="nav-item" onclick="nav('register', this)"><i class="fas fa-users"></i> Manage Students</div>
+            <div class="nav-item" onclick="nav('attendance', this)"><i class="fas fa-calendar-check"></i> Mark Attendance</div>
+            <div class="nav-item" onclick="nav('analysis', this)"><i class="fas fa-chart-line"></i> Daily Log</div>
+            <div class="nav-item" onclick="nav('performance', this)"><i class="fas fa-percentage"></i> Reports</div>
+            <div class="nav-item" onclick="nav('warning', this)"><i class="fas fa-triangle-exclamation" style="color:var(--danger)"></i> Warning List</div>
+        </aside>
+
+        <section class="content">
+            <div id="page-home" class="page">
+                <h1>Overview</h1>
+                <div class="card" style="border-top: 6px solid var(--primary); margin-top: 15px;">
+                    <p style="color: #64748b; font-weight: 600;">Total Student Strength</p>
+                    <h2 id="total-count" style="font-size: 42px; font-weight: 800;">0</h2>
+                </div>
+            </div>
+
+            <div id="page-register" class="page hidden">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap: wrap; gap:10px;">
+                    <h2>Manage Students</h2>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn-success" onclick="exportExcel()"><i class="fas fa-file-excel"></i> Export</button>
+                        <div style="position:relative">
+                            <button class="btn-primary" style="background:#7c3aed"><i class="fas fa-file-import"></i> Import</button>
+                            <input type="file" onchange="importExcel(event)" style="position:absolute; opacity:0; width:100%; top:0; left:0; cursor:pointer">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <input type="hidden" id="edit-idx" value="-1">
+                    <div class="grid-layout">
+                        <div><label>Batch</label><select id="s-batch" onchange="autoGenRoll()"><option value="22">2022</option><option value="23">2023</option><option value="24" selected>2024</option><option value="25">2025</option></select></div>
+                        <div><label>Dept</label><select id="s-dept" onchange="autoGenRoll()"><option value="104">CSE</option><option value="103">ECE</option><option value="105">EEE</option><option value="106">MECH</option><option value="107">CIVIL</option><option value="101">IT</option><option value="102">AIDS</option></select></div>
+                        <div><label>Roll ID</label><input type="text" id="s-roll" maxlength="12"></div>
+                        <div><label>Full Name</label><input type="text" id="s-name"></div>
+                        <div><label>Phone</label><input type="text" id="s-phone" maxlength="10"><button class="btn-suggest" onclick="suggestNum('s-phone')">Suggest No.</button></div>
+                        <div><label>Parent Phone</label><input type="text" id="s-pphone" maxlength="10"><button class="btn-suggest" onclick="suggestNum('s-pphone')">Suggest No.</button></div>
+                    </div>
+                    <button id="save-btn" class="btn-primary" onclick="addStudent()" style="margin-top:20px; width:100%; justify-content:center"><i class="fas fa-save"></i> Save Student</button>
+                </div>
+
+                <div class="filter-bar">
+                    <i class="fas fa-filter" style="color:var(--primary)"></i>
+                    <select id="filter-dept-reg" class="filter-select" onchange="renderStudents()">
+                        <option value="All">All Departments</option><option>CSE</option><option>ECE</option><option>EEE</option><option>MECH</option><option>CIVIL</option><option>IT</option><option>AIDS</option>
+                    </select>
+                </div>
+
+                <div class="table-container"><table><thead><tr><th>Roll ID</th><th>Name</th><th>Dept</th><th>Actions</th></tr></thead><tbody id="student-list"></tbody></table></div>
+            </div>
+
+            <div id="page-attendance" class="page hidden">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom: 15px;">
+                    <h2>Mark Attendance</h2>
+                    <input type="date" id="att-date" style="width:200px">
+                </div>
+                
+                <div class="filter-bar">
+                    <i class="fas fa-filter" style="color:var(--primary)"></i>
+                    <select id="filter-dept-att" class="filter-select" onchange="renderAttSheet()">
+                        <option value="All">All Departments</option><option>CSE</option><option>ECE</option><option>EEE</option><option>MECH</option><option>CIVIL</option><option>IT</option><option>AIDS</option>
+                    </select>
+                </div>
+
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Name / Dept</th><th>Status</th><th>Informed?</th><th>Notes (Optional)</th><th>Notify</th></tr></thead>
+                        <tbody id="att-list"></tbody>
+                    </table>
+                </div>
+                <button class="btn-primary" onclick="saveAttendance()" style="margin-top:20px; width:100%; justify-content:center; padding: 18px;"><i class="fas fa-cloud-arrow-up"></i> Sync Attendance</button>
+            </div>
+
+            <div id="page-analysis" class="page hidden">
+                <h2>Daily Log & Analysis</h2>
+                <div class="filter-bar">
+                    <i class="fas fa-filter" style="color:var(--primary)"></i>
+                    <select id="filter-dept-ana" class="filter-select" onchange="renderAnalysis()">
+                        <option value="All">All Departments</option><option>CSE</option><option>ECE</option><option>EEE</option><option>MECH</option><option>CIVIL</option><option>IT</option><option>AIDS</option>
+                    </select>
+                </div>
+                
+                <div class="card"><canvas id="verticalChart" height="220"></canvas></div>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Date</th><th>Present</th><th>Absent</th><th>Total Strength</th><th>Attendance %</th></tr></thead>
+                        <tbody id="analysis-list"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="page-performance" class="page hidden">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap: wrap; gap:10px;">
+                    <h2>Attendance Percentage</h2>
+                    <button class="btn-success" onclick="downloadCSV()"><i class="fas fa-file-csv"></i> Export CSV</button>
+                </div>
+                
+                <div class="filter-bar">
+                    <i class="fas fa-filter" style="color:var(--primary)"></i>
+                    <select id="filter-dept-perf" class="filter-select" onchange="renderPerformance()">
+                        <option value="All">All Departments</option><option>CSE</option><option>ECE</option><option>EEE</option><option>MECH</option><option>CIVIL</option><option>IT</option><option>AIDS</option>
+                    </select>
+                </div>
+                <div class="table-container"><table><thead><tr><th>Roll ID</th><th>Name</th><th>Present</th><th>Total Days</th><th>Percentage</th></tr></thead><tbody id="perc-list"></tbody></table></div>
+            </div>
+
+            <div id="page-warning" class="page hidden">
+                <h2 style="color:var(--danger)">Warning List (Below 75%)</h2>
+                <div class="filter-bar">
+                    <i class="fas fa-filter" style="color:var(--danger)"></i>
+                    <select id="filter-dept-warn" class="filter-select" onchange="renderWarning()">
+                        <option value="All">All Departments</option><option>CSE</option><option>ECE</option><option>EEE</option><option>MECH</option><option>CIVIL</option><option>IT</option><option>AIDS</option>
+                    </select>
+                </div>
+                <div class="table-container"><table><thead><tr><th>Roll</th><th>Name</th><th>Phone</th><th>%</th></tr></thead><tbody id="warning-list"></tbody></table></div>
+            </div>
+        </section>
+    </main>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
+        import { getDatabase, ref, set, get, child } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDiVuEckGCj-egltVMYM_aS17GGbNiQVVQ",
+            authDomain: "attendance-online-4483c.firebaseapp.com",
+            databaseURL: "https://attendance-online-4483c-default-rtdb.firebaseio.com",
+            projectId: "attendance-online-4483c",
+            storageBucket: "attendance-online-4483c.firebasestorage.app",
+            messagingSenderId: "573667547804",
+            appId: "1:573667547804:web:2da17650b15f0b76d1eb59"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        let students = JSON.parse(localStorage.getItem('m_v24_stu')) || [];
+        let logs = JSON.parse(localStorage.getItem('m_v24_log')) || {};
+        let tempAtt = {};
+        let vChart = null;
+
+        // Hybrid Save: Saves locally instantly, attempts cloud save in background
+        function syncToFirebase() {
+            localStorage.setItem('m_v24_stu', JSON.stringify(students));
+            localStorage.setItem('m_v24_log', JSON.stringify(logs));
+
+            set(ref(db, 'attendance_system_data'), {
+                students: students,
+                logs: logs
+            }).catch(error => {
+                console.warn("Cloud Sync pending (You might be offline). Local data saved safely.");
+            });
+        }
+
+        // Fast Login with 3-second timeout rule
+        async function login() {
+            if(document.getElementById('username').value === 'mano' && document.getElementById('password').value === 'kd') {
+                const btn = document.getElementById('login-btn');
+                btn.innerHTML = "<i class='fas fa-spinner fa-spin'></i> Connecting...";
+                
+                try {
+                    // Try connecting to Firebase, but give up if it takes longer than 3 seconds
+                    const dbPromise = get(child(ref(db), 'attendance_system_data'));
+                    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
+                    
+                    const snapshot = await Promise.race([dbPromise, timeoutPromise]);
+                    
+                    if (snapshot.exists()) {
+                        const data = snapshot.val();
+                        students = data.students || [];
+                        logs = data.logs || {};
+                        localStorage.setItem('m_v24_stu', JSON.stringify(students));
+                        localStorage.setItem('m_v24_log', JSON.stringify(logs));
+                    }
+                } catch(e) {
+                    console.log("Loading local database due to slow network...");
+                }
+
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('main-app').classList.remove('hidden');
+                updateTotal(); renderStudents(); autoGenRoll();
+            } else { alert('Access Denied'); }
+        }
+
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+
+        function nav(id, el) {
+            document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+            document.getElementById('page-'+id).classList.remove('hidden');
+            document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+            el.classList.add('active');
+            
+            if(id === 'register') renderStudents();
+            if(id === 'attendance') { tempAtt = {}; renderAttSheet(); }
+            if(id === 'analysis') renderAnalysis();
+            if(id === 'performance') renderPerformance();
+            if(id === 'warning') renderWarning();
+            if(window.innerWidth < 768) toggleSidebar();
+        }
+
+        function suggestNum(id) {
+            const prefix = ["6", "7", "8", "9"];
+            document.getElementById(id).value = prefix[Math.floor(Math.random() * 4)] + Math.floor(100000000 + Math.random() * 900000000).toString().slice(0,9);
+        }
+
+        function autoGenRoll() {
+            if(document.getElementById('edit-idx').value !== "-1") return;
+            const batch = document.getElementById('s-batch').value, dCode = document.getElementById('s-dept').value;
+            const dName = document.getElementById('s-dept').options[document.getElementById('s-dept').selectedIndex].text;
+            const count = students.filter(s => s.dept === dName).length + 1;
+            document.getElementById('s-roll').value = `9512${batch}${dCode}${String(count).padStart(3, '0')}`;
+        }
+
+        function addStudent() {
+            const idx = parseInt(document.getElementById('edit-idx').value), roll = document.getElementById('s-roll').value;
+            if(!roll || students.some((s, i) => s.roll === roll && i !== idx)) return alert("Duplicate Roll ID Detected!");
+            const data = { roll, name: document.getElementById('s-name').value, dept: document.getElementById('s-dept').options[document.getElementById('s-dept').selectedIndex].text, phone: document.getElementById('s-phone').value, pphone: document.getElementById('s-pphone').value };
+            if(idx === -1) students.push(data); else students[idx] = data;
+            
+            syncToFirebase();
+            resetForm(); renderStudents(); updateTotal();
+        }
+
+        function renderStudents() {
+            const filter = document.getElementById('filter-dept-reg').value;
+            const list = filter === "All" ? students : students.filter(s => s.dept === filter);
+            document.getElementById('student-list').innerHTML = list.map((s) => {
+                const globalIdx = students.indexOf(s);
+                return `<tr>
+                <td>${s.roll}</td><td>${s.name}</td><td>${s.dept}</td>
+                <td><div style="display:flex; gap:10px">
+                    <button class="btn-primary" onclick="editStu(${globalIdx})"><i class="fas fa-edit"></i></button>
+                    <button class="btn-danger" onclick="delStu(${globalIdx})"><i class="fas fa-trash-alt"></i></button>
+                </div></td></tr>`;
+            }).join('');
+        }
+
+        function editStu(i) {
+            const s = students[i]; document.getElementById('edit-idx').value = i;
+            document.getElementById('s-roll').value = s.roll; document.getElementById('s-name').value = s.name;
+            document.getElementById('save-btn').innerHTML = "Update Student"; window.scrollTo(0,0);
+        }
+
+        function delStu(i) { 
+            if(confirm("Confirm: Delete student permanently?")) { 
+                students.splice(i,1); 
+                syncToFirebase();
+                renderStudents(); updateTotal(); 
+            } 
+        }
+
+        function setAtt(roll, status) {
+            tempAtt[roll] = status;
+            const row = document.getElementById(`row-${roll}`);
+            if(row) {
+                row.querySelectorAll('.att-btn').forEach(b => b.classList.remove('active-p', 'active-a'));
+                row.querySelector('.btn-' + status.toLowerCase()).classList.add('active-' + status.toLowerCase());
+            }
+        }
+
+        function renderAttSheet() {
+            const filter = document.getElementById('filter-dept-att').value;
+            const list = filter === "All" ? students : students.filter(s => s.dept === filter);
+            document.getElementById('att-date').valueAsDate = new Date();
+            
+            document.getElementById('att-list').innerHTML = list.map(s => {
+                const status = tempAtt[s.roll] || 'P';
+                return `<tr id="row-${s.roll}">
+                    <td><b>${s.name}</b><br><small>${s.dept} | ${s.roll}</small></td>
+                    <td><div style="display:flex; gap:10px">
+                        <button class="att-btn btn-p ${status==='P'?'active-p':''}" onclick="setAtt('${s.roll}','P')">P</button>
+                        <button class="att-btn btn-a ${status==='A'?'active-a':''}" onclick="setAtt('${s.roll}','A')">A</button>
+                    </div></td>
+                    <td><input type="checkbox" id="inf-${s.roll}" style="width:25px; height:25px;"></td>
+                    <td><input type="text" id="notes-${s.roll}" placeholder="Notes" class="notes-input"></td>
+                    <td><div class="action-spacer">
+                        <a href="tel:${s.pphone}" class="btn-action-mega bg-call"><i class="fas fa-phone"></i></a>
+                        <a href="https://wa.me/91${s.pphone}?text=Absent: ${s.name} is absent today." target="_blank" class="btn-action-mega bg-wa"><i class="fab fa-whatsapp"></i></a>
+                    </div></td>
+                </tr>`}).join('');
+        }
+
+        function saveAttendance() {
+            const d = document.getElementById('att-date').value;
+            logs[d] = students.map(s => {
+                const domInf = document.getElementById(`inf-${s.roll}`);
+                const domNotes = document.getElementById(`notes-${s.roll}`);
+                return { 
+                    roll: s.roll, 
+                    status: tempAtt[s.roll] || 'P', 
+                    informed: domInf ? domInf.checked : false, 
+                    notes: domNotes ? domNotes.value : "" 
+                };
+            });
+            syncToFirebase(); 
+            alert("Attendance Synced!");
+        }
+
+        function renderAnalysis() {
+            const filter = document.getElementById('filter-dept-ana').value;
+            const deptRolls = new Set(students.filter(s => filter === "All" || s.dept === filter).map(s => s.roll));
+
+            const labels = Object.keys(logs).sort().slice(-7);
+            const present = labels.map(d => logs[d].filter(x => x.status === 'P' && deptRolls.has(x.roll)).length);
+            const absent = labels.map(d => logs[d].filter(x => x.status === 'A' && deptRolls.has(x.roll)).length);
+            
+            if(vChart) vChart.destroy();
+            vChart = new Chart(document.getElementById('verticalChart'), {
+                type: 'bar', data: { labels, datasets: [{ label: 'Present', data: present, backgroundColor: '#16a34a' }, { label: 'Absent', data: absent, backgroundColor: '#dc2626' }] },
+                options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, precision: 0 } } } }
+            });
+            
+            document.getElementById('analysis-list').innerHTML = Object.keys(logs).sort().reverse().map(d => {
+                const p = logs[d].filter(x => x.status === 'P' && deptRolls.has(x.roll)).length;
+                const a = logs[d].filter(x => x.status === 'A' && deptRolls.has(x.roll)).length;
+                const t = p + a;
+                const pct = t === 0 ? 0 : ((p/t)*100).toFixed(1);
+                return `<tr><td>${d}</td><td>${p}</td><td>${a}</td><td>${t}</td><td>${pct}%</td></tr>`;
+            }).join('');
+        }
+
+        function getStats(roll) {
+            let total = 0, pCount = 0;
+            for(let d in logs) { 
+                const record = logs[d].find(x => x.roll === roll);
+                if(record) { total++; if(record.status === 'P') pCount++; }
+            }
+            return { total, present: pCount, pct: total === 0 ? 0 : ((pCount/total)*100).toFixed(1) };
+        }
+
+        function renderPerformance() {
+            const f = document.getElementById('filter-dept-perf').value;
+            const list = f === "All" ? students : students.filter(s => s.dept === f);
+            document.getElementById('perc-list').innerHTML = list.map(s => {
+                const st = getStats(s.roll);
+                return `<tr><td>${s.roll}</td><td>${s.name}</td><td>${st.present}</td><td>${st.total}</td><td>${st.pct}%</td></tr>`;
+            }).join('');
+        }
+
+        function renderWarning() {
+            const f = document.getElementById('filter-dept-warn').value;
+            const list = students.filter(s => { 
+                const st = getStats(s.roll); 
+                return (f === "All" || s.dept === f) && st.pct < 75 && st.total > 0; 
+            });
+            document.getElementById('warning-list').innerHTML = list.map(s => `<tr><td>${s.roll}</td><td>${s.name}</td><td>${s.pphone}</td><td style="color:red; font-weight:bold">${getStats(s.roll).pct}%</td></tr>`).join('');
+        }
+
+        function downloadCSV() {
+            const f = document.getElementById('filter-dept-perf').value;
+            const list = f === "All" ? students : students.filter(s => s.dept === f);
+            
+            let csv = "Roll ID,Name,Dept,Present Days,Total Days,Percentage\n";
+            list.forEach(s => {
+                const st = getStats(s.roll);
+                const safeName = `"${s.name.replace(/"/g, '""')}"`;
+                csv += `${s.roll},${safeName},${s.dept},${st.present},${st.total},${st.pct}%\n`;
+            });
+            
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Attendance_Report_${f}.csv`; a.click();
+        }
+
+        function exportExcel() {
+            const ws = XLSX.utils.json_to_sheet(students);
+            const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Students"); XLSX.writeFile(wb, "Student_Database.xlsx");
+        }
+
+        function importExcel(e) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const workbook = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+                students = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                syncToFirebase();
+                renderStudents(); updateTotal(); alert("Import Synced to Cloud!");
+            };
+            reader.readAsArrayBuffer(e.target.files[0]);
+        }
+
+        function resetForm() {
+            document.getElementById('edit-idx').value = "-1"; document.getElementById('s-name').value = "";
+            document.getElementById('save-btn').innerHTML = "Save Student"; autoGenRoll();
+        }
+
+        function updateTotal() { document.getElementById('total-count').innerText = students.length; }
+
+        // REQUIRED BINDING FOR FIREBASE MODULE
+        window.login = login;
+        window.toggleSidebar = toggleSidebar;
+        window.nav = nav;
+        window.suggestNum = suggestNum;
+        window.autoGenRoll = autoGenRoll;
+        window.addStudent = addStudent;
+        window.renderStudents = renderStudents;
+        window.editStu = editStu;
+        window.delStu = delStu;
+        window.setAtt = setAtt;
+        window.renderAttSheet = renderAttSheet;
+        window.saveAttendance = saveAttendance;
+        window.renderAnalysis = renderAnalysis;
+        window.renderPerformance = renderPerformance;
+        window.renderWarning = renderWarning;
+        window.downloadCSV = downloadCSV;
+        window.exportExcel = exportExcel;
+        window.importExcel = importExcel;
+    </script>
+</body>
+</html>

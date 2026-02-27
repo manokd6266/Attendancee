@@ -9,6 +9,9 @@
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
+
     <style>
         :root {
             --primary: #4f46e5; --danger: #dc2626; --success: #16a34a;
@@ -38,7 +41,7 @@
         .card { background: white; padding: 24px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 25px; }
         .grid-layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
         label { display: block; font-size: 11px; font-weight: 700; color: #64748b; margin-bottom: 5px; text-transform: uppercase; }
-        input, select { padding: 12px; border: 1px solid #cbd5e1; border-radius: 10px; width: 100%; font-size: 13px; }
+        input, select { padding: 12px; border: 1px solid #cbd5e1; border-radius: 10px; width: 100%; font-size: 13px; outline: none; }
         
         button { padding: 12px 20px; border-radius: 10px; border: none; cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; transition: 0.2s; }
         .btn-primary { background: var(--primary); color: white; }
@@ -75,9 +78,10 @@
     <div id="login-screen">
         <div class="login-card">
             <div style="text-align: center; margin-bottom: 30px;">
-                <i class="fas fa-cloud" style="font-size: 45px; color: var(--primary); margin-bottom: 15px;"></i>
+                <i class="fas fa-cloud-arrow-up" style="font-size: 45px; color: var(--primary); margin-bottom: 15px;"></i>
                 <h2 style="font-weight: 800;">Admin Access</h2>
                 <p style="color: #64748b; font-size: 12px;">Cloud Powered Attendance System</p>
+                <div id="cloud-status" style="font-size: 11px; color: var(--danger); margin-top: 5px; font-weight: bold;"></div>
             </div>
             <div class="input-group" style="margin-bottom:15px"><input type="text" id="username" placeholder="Username" style="padding:12px; width:100%; border-radius:8px; border:1px solid #ddd"></div>
             <div class="input-group" style="margin-bottom:15px"><input type="password" id="password" placeholder="Password" style="padding:12px; width:100%; border-radius:8px; border:1px solid #ddd"></div>
@@ -134,7 +138,7 @@
                         <div><label>Phone</label><input type="text" id="s-phone" maxlength="10"><button class="btn-suggest" onclick="suggestNum('s-phone')">Suggest No.</button></div>
                         <div><label>Parent Phone</label><input type="text" id="s-pphone" maxlength="10"><button class="btn-suggest" onclick="suggestNum('s-pphone')">Suggest No.</button></div>
                     </div>
-                    <button id="save-btn" class="btn-primary" onclick="addStudent()" style="margin-top:20px; width:100%; justify-content:center"><i class="fas fa-save"></i> Save Student</button>
+                    <button id="save-btn" class="btn-primary" onclick="addStudent()" style="margin-top:20px; width:100%; justify-content:center"><i class="fas fa-save"></i> Save Student to Cloud</button>
                 </div>
 
                 <div class="filter-bar">
@@ -166,7 +170,7 @@
                         <tbody id="att-list"></tbody>
                     </table>
                 </div>
-                <button class="btn-primary" onclick="saveAttendance()" style="margin-top:20px; width:100%; justify-content:center; padding: 18px;"><i class="fas fa-cloud-arrow-up"></i> Sync Attendance</button>
+                <button class="btn-primary" onclick="saveAttendance()" style="margin-top:20px; width:100%; justify-content:center; padding: 18px;"><i class="fas fa-cloud-arrow-up"></i> Sync Attendance to Cloud</button>
             </div>
 
             <div id="page-analysis" class="page hidden">
@@ -215,10 +219,8 @@
         </section>
     </main>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
-        import { getDatabase, ref, set, get, child } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-database.js";
-
+    <script>
+        // 1. Configure Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyDiVuEckGCj-egltVMYM_aS17GGbNiQVVQ",
             authDomain: "attendance-online-4483c.firebaseapp.com",
@@ -228,52 +230,53 @@
             messagingSenderId: "573667547804",
             appId: "1:573667547804:web:2da17650b15f0b76d1eb59"
         };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-
-        let students = JSON.parse(localStorage.getItem('m_v24_stu')) || [];
-        let logs = JSON.parse(localStorage.getItem('m_v24_log')) || {};
+        let students = JSON.parse(localStorage.getItem('m_v26_stu')) || [];
+        let logs = JSON.parse(localStorage.getItem('m_v26_log')) || {};
         let tempAtt = {};
         let vChart = null;
 
-        // Hybrid Save: Saves locally instantly, attempts cloud save in background
-        function syncToFirebase() {
-            localStorage.setItem('m_v24_stu', JSON.stringify(students));
-            localStorage.setItem('m_v24_log', JSON.stringify(logs));
+        // 2. Real-Time Cloud Listener
+        db.ref('ams_live_data').on('value', (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                students = data.students || [];
+                logs = data.logs || {};
+                
+                localStorage.setItem('m_v26_stu', JSON.stringify(students));
+                localStorage.setItem('m_v26_log', JSON.stringify(logs));
 
-            set(ref(db, 'attendance_system_data'), {
+                if (!document.getElementById('main-app').classList.contains('hidden')) {
+                    updateTotal();
+                    if (!document.getElementById('page-register').classList.contains('hidden')) renderStudents();
+                    if (!document.getElementById('page-attendance').classList.contains('hidden')) renderAttSheet();
+                    if (!document.getElementById('page-analysis').classList.contains('hidden')) renderAnalysis();
+                    if (!document.getElementById('page-performance').classList.contains('hidden')) renderPerformance();
+                    if (!document.getElementById('page-warning').classList.contains('hidden')) renderWarning();
+                }
+            }
+        }, (error) => {
+            document.getElementById('cloud-status').innerText = "Cloud Connection Error. Check Rules.";
+        });
+
+        // 3. Save to Cloud
+        function syncToFirebase() {
+            localStorage.setItem('m_v26_stu', JSON.stringify(students));
+            localStorage.setItem('m_v26_log', JSON.stringify(logs));
+            
+            db.ref('ams_live_data').set({
                 students: students,
                 logs: logs
             }).catch(error => {
-                console.warn("Cloud Sync pending (You might be offline). Local data saved safely.");
+                alert("Could not connect to Cloud. Data saved to phone only.");
             });
         }
 
-        // Fast Login with 3-second timeout rule
-        async function login() {
+        // 4. Interface Functions
+        function login() {
             if(document.getElementById('username').value === 'mano' && document.getElementById('password').value === 'kd') {
-                const btn = document.getElementById('login-btn');
-                btn.innerHTML = "<i class='fas fa-spinner fa-spin'></i> Connecting...";
-                
-                try {
-                    // Try connecting to Firebase, but give up if it takes longer than 3 seconds
-                    const dbPromise = get(child(ref(db), 'attendance_system_data'));
-                    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
-                    
-                    const snapshot = await Promise.race([dbPromise, timeoutPromise]);
-                    
-                    if (snapshot.exists()) {
-                        const data = snapshot.val();
-                        students = data.students || [];
-                        logs = data.logs || {};
-                        localStorage.setItem('m_v24_stu', JSON.stringify(students));
-                        localStorage.setItem('m_v24_log', JSON.stringify(logs));
-                    }
-                } catch(e) {
-                    console.log("Loading local database due to slow network...");
-                }
-
                 document.getElementById('login-screen').classList.add('hidden');
                 document.getElementById('main-app').classList.remove('hidden');
                 updateTotal(); renderStudents(); autoGenRoll();
@@ -391,7 +394,7 @@
                 };
             });
             syncToFirebase(); 
-            alert("Attendance Synced!");
+            alert("Attendance Synced to Cloud!");
         }
 
         function renderAnalysis() {
@@ -482,25 +485,13 @@
 
         function updateTotal() { document.getElementById('total-count').innerText = students.length; }
 
-        // REQUIRED BINDING FOR FIREBASE MODULE
-        window.login = login;
-        window.toggleSidebar = toggleSidebar;
-        window.nav = nav;
-        window.suggestNum = suggestNum;
-        window.autoGenRoll = autoGenRoll;
-        window.addStudent = addStudent;
-        window.renderStudents = renderStudents;
-        window.editStu = editStu;
-        window.delStu = delStu;
-        window.setAtt = setAtt;
-        window.renderAttSheet = renderAttSheet;
-        window.saveAttendance = saveAttendance;
-        window.renderAnalysis = renderAnalysis;
-        window.renderPerformance = renderPerformance;
-        window.renderWarning = renderWarning;
-        window.downloadCSV = downloadCSV;
-        window.exportExcel = exportExcel;
-        window.importExcel = importExcel;
+        document.getElementById('s-dob').addEventListener('input', function(e) {
+            let v = e.target.value.replace(/\D/g,'').slice(0,8);
+            if(v.length >= 2) v = v.slice(0,2) + '/' + v.slice(2);
+            if(v.length >= 5) v = v.slice(0,5) + '/' + v.slice(5);
+            e.target.value = v;
+        });
+
     </script>
 </body>
 </html>
